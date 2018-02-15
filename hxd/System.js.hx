@@ -1,5 +1,11 @@
 package hxd;
 
+#if kha
+
+typedef System = SystemKha;
+
+#else
+
 enum Platform {
 	IOS;
 	Android;
@@ -98,3 +104,5 @@ class System {
 	static function set_allowTimeout(b) return false;
 
 }
+
+#end

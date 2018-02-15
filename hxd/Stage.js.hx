@@ -1,5 +1,11 @@
 package hxd;
 
+#if kha
+
+typedef Stage = StageKha;
+
+#else
+
 class Stage {
 
 	var resizeEvents : List<Void -> Void>;
@@ -252,3 +258,5 @@ class Stage {
 	}
 
 }
+
+#end

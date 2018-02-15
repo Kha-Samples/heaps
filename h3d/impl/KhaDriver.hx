@@ -2,7 +2,6 @@ package h3d.impl;
 
 import h3d.impl.Driver;
 import h3d.mat.Pass;
-import kha.System;
 
 class KhaDriver extends h3d.impl.Driver {
 	public function new(antiAlias: Int) {
@@ -22,9 +21,7 @@ class KhaDriver extends h3d.impl.Driver {
 	}
 
 	override function init(onCreate:Bool->Void, forceSoftware=false) {
-		System.init({title: "heaps", width: 1024, height: 768}, function () {
-			onCreate(false);
-		});
+		onCreate(false);
 	}
 
 	override function clear(?color:h3d.Vector, ?depth:Float, ?stencil:Int) {
