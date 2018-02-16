@@ -230,8 +230,13 @@ class KhaDriver extends h3d.impl.Driver {
 
 	override function uploadTexturePixels(t:h3d.mat.Texture, pixels:hxd.Pixels, mipLevel:Int, side:Int) {
 		var data = t.t.lock(mipLevel);
-		for( i in 0...pixels.bytes.length ) {
-			data.set(i, pixels.bytes.get(i));
+		for( y in 0...t.height ) {
+			for( x in 0...t.width ) {
+				data.set(y * t.width * 4 + x * 4 + 0, pixels.bytes.get((t.height - y) * t.width * 4 + x * 4 + 0));
+				data.set(y * t.width * 4 + x * 4 + 1, pixels.bytes.get((t.height - y) * t.width * 4 + x * 4 + 1));
+				data.set(y * t.width * 4 + x * 4 + 2, pixels.bytes.get((t.height - y) * t.width * 4 + x * 4 + 2));
+				data.set(y * t.width * 4 + x * 4 + 3, pixels.bytes.get((t.height - y) * t.width * 4 + x * 4 + 3));
+			}
 		}
 		t.t.unlock();
 	}
