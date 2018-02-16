@@ -47,6 +47,13 @@ class SystemKha {
 
 	public static function start( callb : Void -> Void ) : Void {
 		kha.System.init({title: "heaps", width: 1024, height: 768}, function () {
+			kha.System.notifyOnRender(function (framebuffer: kha.Framebuffer) {
+				h3d.impl.KhaDriver.g = framebuffer.g4;
+				if (loopFunc != null) {
+					loopFunc();
+				}
+				h3d.impl.KhaDriver.g = null;
+			});
 			callb();
 		});
 	}

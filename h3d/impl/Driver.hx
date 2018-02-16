@@ -1,6 +1,12 @@
 package h3d.impl;
 
-#if flash
+#if kha
+typedef IndexBuffer = kha.graphics4.IndexBuffer;
+typedef VertexBuffer = kha.graphics4.VertexBuffer;
+typedef Texture = kha.Image;
+typedef DepthBuffer = {};
+typedef Query = {};
+#elseif flash
 typedef IndexBuffer = flash.display3D.IndexBuffer3D;
 typedef VertexBuffer = Stage3dDriver.VertexWrapper;
 typedef Texture = flash.display3D.textures.TextureBase;
