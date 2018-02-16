@@ -2,13 +2,83 @@ package h3d.impl;
 
 import h3d.impl.Driver;
 import h3d.mat.Pass;
+import kha.Framebuffer;
 import kha.Image;
+import kha.graphics4.ConstantLocation;
+import kha.graphics4.FragmentShader;
 import kha.graphics4.IndexBuffer;
+import kha.graphics4.PipelineState;
+import kha.graphics4.TextureUnit;
 import kha.graphics4.Usage;
 import kha.graphics4.VertexBuffer;
+import kha.graphics4.VertexData;
+import kha.graphics4.VertexShader;
+import kha.graphics4.VertexStructure;
+
+private class ShaderParameters {
+	public var globals:ConstantLocation;
+	public var params:ConstantLocation;
+	public var textures:Array<TextureUnit> = [];
+	public var cubeTextures:Array<TextureUnit> = [];
+
+	public function new(pipeline:PipelineState, data:hxsl.RuntimeShader.RuntimeShaderData, prefix:String) {
+		globals = pipeline.getConstantLocation(prefix + "Globals");
+		params = pipeline.getConstantLocation(prefix + "Params");
+		textures = [for( i in 0...data.textures2DCount ) pipeline.getTextureUnit(prefix + "Textures[" + i + "]")];
+		cubeTextures = [for( i in 0...data.texturesCubeCount ) pipeline.getTextureUnit(prefix + "TexturesCube[" + i + "]")];
+	}
+}
+
+private class Program {
+	public var pipeline:PipelineState;
+
+	public var vertexParameters:ShaderParameters;
+	public var fragmentParameters:ShaderParameters;
+
+	public function new(shader:hxsl.RuntimeShader) {
+		var glout = new hxsl.GlslOut();
+		glout.glES = true;
+
+		pipeline = new PipelineState();
+		pipeline.vertexShader = VertexShader.fromSource(glout.run(shader.vertex.data));
+		pipeline.fragmentShader = FragmentShader.fromSource(glout.run(shader.fragment.data));
+
+		// trace("Vertex shader:\n" + glout.run(shader.vertex.data));
+		// trace("Fragment shader:\n" + glout.run(shader.fragment.data));
+
+		var structure = new VertexStructure();
+		for( v in shader.vertex.data.vars )
+			switch( v.kind ) {
+			case Input:
+				var data: VertexData;
+				switch( v.type ) {
+				case TVec(n, _):
+					data = switch ( n ) {
+						case 2: data = VertexData.Float2;
+						case 3: data = VertexData.Float3;
+						case 4: data = VertexData.Float4;
+						default: throw "assert " + v.type;
+					}
+				case TBytes(n): throw "assert " + v.type;
+				case TFloat: data = VertexData.Float1;
+				default: throw "assert " + v.type;
+				}
+				structure.add(v.name, data);
+			default:
+			}
+		pipeline.inputLayout = [structure];
+		pipeline.compile();
+
+		vertexParameters = new ShaderParameters(pipeline, shader.vertex, "vertex");		
+		fragmentParameters = new ShaderParameters(pipeline, shader.fragment, "fragment");
+	}
+}
 
 class KhaDriver extends h3d.impl.Driver {
+	public static var framebuffer: Framebuffer;
 	public static var g: kha.graphics4.Graphics;
+	var programs = new Map<Int, Program>();
+	var curProgram: Program = null;
 
 	public function new(antiAlias: Int) {
 
@@ -42,8 +112,12 @@ class KhaDriver extends h3d.impl.Driver {
 		g.end();
 	}
 
+	static var firstgetDefaultDepthBuffer = true;
 	override function getDefaultDepthBuffer():h3d.mat.DepthBuffer {
-		trace("TODO: getDefaultDepthBuffer");
+		if ( firstgetDefaultDepthBuffer ) {
+			trace("TODO: getDefaultDepthBuffer");
+			firstgetDefaultDepthBuffer = false;
+		}
 		return null;
 	}
 
@@ -72,7 +146,10 @@ class KhaDriver extends h3d.impl.Driver {
 	}
 
 	override function allocTexture(t:h3d.mat.Texture):Texture {
-		return Image.create(t.width, t.height);
+		if (t.flags.has(Target))
+			return Image.createRenderTarget(t.width, t.height);
+		else
+			return Image.create(t.width, t.height);
 	}
 
 	override function disposeTexture(t:h3d.mat.Texture) {
@@ -134,14 +211,18 @@ class KhaDriver extends h3d.impl.Driver {
 
 	override function uploadTexturePixels(t:h3d.mat.Texture, pixels:hxd.Pixels, mipLevel:Int, side:Int) {
 		var data = t.t.lock(mipLevel);
-		for( i in 0...data.length ) {
+		for( i in 0...pixels.bytes.length ) {
 			data.set(i, pixels.bytes.get(i));
 		}
 		t.t.unlock();
 	}
 
+	static var firstSelectMaterial = true;
 	override public function selectMaterial(pass:h3d.mat.Pass) {
-		trace("TODO: selectMaterial");
+		if ( firstSelectMaterial ) {
+			trace("TODO: selectMaterial");
+			firstSelectMaterial = false;
+		}
 	}
 
 	override function getNativeShaderCode(shader:hxsl.RuntimeShader) {
@@ -162,7 +243,16 @@ class KhaDriver extends h3d.impl.Driver {
 	}
 
 	override function setRenderTarget(tex:Null<h3d.mat.Texture>, face = 0, mipLevel = 0) {
-		trace("TODO: setRenderTarget");
+		if( tex == null ) {
+			g.end();
+			g = framebuffer.g4;
+			g.begin();
+		}
+		else {
+			g.end();
+			g = tex.t.g4;
+			g.begin();
+		}
 	}
 
 	override function setRenderTargets(textures:Array<h3d.mat.Texture>) {
@@ -170,46 +260,20 @@ class KhaDriver extends h3d.impl.Driver {
 	}
 
 	override function setRenderZone(x:Int, y:Int, width:Int, height:Int) {
-		g.scissor(x, y, width, height);
+		if( x == 0 && y == 0 && width < 0 && height < 0 )
+			g.disableScissor()
+		else
+			g.scissor(x, y, width, height);
 	}
 
-	var pipelines = new Map<Int, kha.graphics4.PipelineState>();
-
 	override function selectShader(shader:hxsl.RuntimeShader) {
-		var pipeline = pipelines.get(shader.id);
-		if( pipeline == null ) {
-			var glout = new hxsl.GlslOut();
-			glout.glES = true;
-
-			pipeline = new kha.graphics4.PipelineState();
-			pipeline.vertexShader = kha.graphics4.VertexShader.fromSource(glout.run(shader.vertex.data));
-			pipeline.fragmentShader = kha.graphics4.FragmentShader.fromSource(glout.run(shader.fragment.data));
-
-			var structure = new kha.graphics4.VertexStructure();
-			for( v in shader.vertex.data.vars )
-				switch( v.kind ) {
-				case Input:
-					var data: kha.graphics4.VertexData;
-					var size = switch( v.type ) {
-					case TVec(n, _):
-						data = switch ( n ) {
-							case 2: data = kha.graphics4.VertexData.Float2;
-							case 3: data = kha.graphics4.VertexData.Float3;
-							case 4: data = kha.graphics4.VertexData.Float4;
-							default: throw "assert " + v.type;
-						}
-					case TBytes(n): throw "assert " + v.type;
-					case TFloat: data = kha.graphics4.VertexData.Float1;
-					default: throw "assert " + v.type;
-					}
-					structure.add(v.name, data);
-				default:
-				}
-			pipeline.inputLayout = [structure];
+		var program = programs.get(shader.id);
+		if( program == null ) {
+			program = new Program(shader);
+			programs.set(shader.id, program);
 		}
-		
-		g.setPipeline(pipeline);
-		
+		g.setPipeline(program.pipeline);
+		curProgram = program;
 		return true;
 	}
 
@@ -218,7 +282,7 @@ class KhaDriver extends h3d.impl.Driver {
 	}
 
 	override function selectBuffer(buffer:Buffer) {
-		trace("TODO: selectBuffer");
+		g.setVertexBuffer(@:privateAccess buffer.buffer.vbuf);
 	}
 
 	override function selectMultiBuffers(bl:Buffer.BufferOffset) {
@@ -226,10 +290,34 @@ class KhaDriver extends h3d.impl.Driver {
 	}
 
 	override function uploadShaderBuffers(buffers:h3d.shader.Buffers, which:h3d.shader.Buffers.BufferKind) {
-		trace("TODO: uploadShaderBuffers");
+		uploadBuffer(curProgram.vertexParameters, buffers.vertex, which);
+		uploadBuffer(curProgram.fragmentParameters, buffers.fragment, which);
+	}
+
+	function uploadBuffer(parameters:ShaderParameters, buf:h3d.shader.Buffers.ShaderBuffers, which:h3d.shader.Buffers.BufferKind) {
+		switch( which ) {
+		case Globals:
+			g.setFloats(parameters.globals, buf.globals);
+		case Params:
+			g.setFloats(parameters.params, buf.params);
+		case Textures:
+			for( i in 0...parameters.textures.length + parameters.cubeTextures.length ) {
+				var texture = buf.tex[i];
+				var isCube = i >= parameters.textures.length;
+				if( texture != null && !texture.isDisposed() ) {
+					if( isCube ) {
+						throw "CubeTexture";
+					}
+					else {
+						g.setTexture(parameters.textures[i], texture.t);
+					}
+				}
+			}
+		}
 	}
 
 	override function draw(ibuf:IndexBuffer, startIndex:Int, ntriangles:Int) {
-		g.drawIndexedVertices(startIndex, Std.int(ntriangles / 3));
+		g.setIndexBuffer(ibuf);
+		g.drawIndexedVertices(startIndex, Std.int(ntriangles * 3));
 	}
 }

@@ -48,6 +48,7 @@ class SystemKha {
 	public static function start( callb : Void -> Void ) : Void {
 		kha.System.init({title: "heaps", width: 1024, height: 768}, function () {
 			kha.System.notifyOnRender(function (framebuffer: kha.Framebuffer) {
+				h3d.impl.KhaDriver.framebuffer = framebuffer;
 				h3d.impl.KhaDriver.g = framebuffer.g4;
 				if (loopFunc != null) {
 					loopFunc();
@@ -78,8 +79,8 @@ class SystemKha {
 
 	// getters
 
-	static function get_width() : Int return 0;
-	static function get_height() : Int return 0;
+	static function get_width() : Int return kha.System.windowWidth(0);
+	static function get_height() : Int return kha.System.windowHeight(0);
 	static function get_lang() : String return "en";
 	static function get_platform() : Platform return PC;
 	static function get_screenDPI() : Int return 72;

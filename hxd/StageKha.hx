@@ -76,11 +76,11 @@ class StageKha {
 	}
 
 	function get_width() : Int {
-		return 0;
+		return kha.System.windowWidth(0);
 	}
 
 	function get_height() : Int {
-		return 0;
+		return kha.System.windowHeight(0);
 	}
 
 	function get_mouseLock() : Bool {
