@@ -31,7 +31,7 @@ private class ShaderParameters {
 
 private class Program {
 	public var pipeline:PipelineState;
-
+	public var structures: Array<VertexStructure>;
 	public var vertexParameters:ShaderParameters;
 	public var fragmentParameters:ShaderParameters;
 
@@ -66,11 +66,27 @@ private class Program {
 				structure.add(v.name, data);
 			default:
 			}
-		pipeline.inputLayout = [structure];
+		this.structures = [structure];
+		pipeline.inputLayout = this.structures;
 		pipeline.compile();
 
 		vertexParameters = new ShaderParameters(pipeline, shader.vertex, "vertex");		
 		fragmentParameters = new ShaderParameters(pipeline, shader.fragment, "fragment");
+	}
+}
+
+class VertexWrapper {
+	public var count:Int;
+	public var stride:Int;
+	public var data:haxe.ds.Vector<kha.FastFloat>;
+	public var usage:Usage;
+	public var vertexBuffer:VertexBuffer;
+	
+	public function new(count:Int, stride:Int, usage:Usage) {
+		this.count = count;
+		this.stride = stride;
+		data = new haxe.ds.Vector<kha.FastFloat>(count * stride);
+		this.usage = usage;
 	}
 }
 
@@ -121,12 +137,8 @@ class KhaDriver extends h3d.impl.Driver {
 		return null;
 	}
 
-	override function allocVertexes(m:ManagedBuffer):VertexBuffer {
-		var structure = new kha.graphics4.VertexStructure();
-		for (i in 0...m.stride) {
-			structure.add("_" + i, kha.graphics4.VertexData.Float1);
-		}
-		return new VertexBuffer(m.size, structure, m.flags.has(Dynamic) ? Usage.DynamicUsage : Usage.StaticUsage);
+	override function allocVertexes(m:ManagedBuffer):VertexWrapper {
+		return new VertexWrapper(m.size, m.stride, m.flags.has(Dynamic) ? Usage.DynamicUsage : Usage.StaticUsage);
 	}
 
 	override function allocIndexes(count:Int) : IndexBuffer {
@@ -146,7 +158,7 @@ class KhaDriver extends h3d.impl.Driver {
 	}
 
 	override function allocTexture(t:h3d.mat.Texture):Texture {
-		if (t.flags.has(Target))
+		if( t.flags.has(Target) )
 			return Image.createRenderTarget(t.width, t.height);
 		else
 			return Image.create(t.width, t.height);
@@ -156,7 +168,7 @@ class KhaDriver extends h3d.impl.Driver {
 		
 	}
 
-	override function disposeVertexes(v:VertexBuffer) {
+	override function disposeVertexes(v:VertexWrapper) {
 		
 	}
 
@@ -180,15 +192,22 @@ class KhaDriver extends h3d.impl.Driver {
 		throw "uploadIndexBytes";
 	}
 
-	override function uploadVertexBuffer(v:VertexBuffer, startVertex:Int, vertexCount:Int, buf:hxd.FloatBuffer, bufPos:Int) {
-		var vertices = v.lock(startVertex, vertexCount);
-		for( i in 0...vertexCount ) {
-			vertices.set(i, buf[bufPos + i]);
+	override function uploadVertexBuffer(v:VertexWrapper, startVertex:Int, vertexCount:Int, buf:hxd.FloatBuffer, bufPos:Int) {
+		if( v.vertexBuffer != null ) {
+			var vertices = v.vertexBuffer.lock(startVertex, vertexCount);
+			for( i in 0...vertexCount * v.stride ) {
+				vertices.set(i, buf[bufPos + i]);
+			}
+			v.vertexBuffer.unlock();
 		}
-		v.unlock();
+		else {
+			for( i in 0...vertexCount * v.stride ) {
+				v.data.set(i, buf[bufPos + i]);
+			}
+		}
 	}
 
-	override function uploadVertexBytes(v:VertexBuffer, startVertex:Int, vertexCount:Int, buf:haxe.io.Bytes, bufPos:Int) {
+	override function uploadVertexBytes(v:VertexWrapper, startVertex:Int, vertexCount:Int, buf:haxe.io.Bytes, bufPos:Int) {
 		throw "uploadVertexBytes";
 	}
 
@@ -196,7 +215,7 @@ class KhaDriver extends h3d.impl.Driver {
 		throw "readIndexBytes";
 	}
 
-	override function readVertexBytes(v:VertexBuffer, startVertex:Int, vertexCount:Int, buf:haxe.io.Bytes, bufPos:Int) {
+	override function readVertexBytes(v:VertexWrapper, startVertex:Int, vertexCount:Int, buf:haxe.io.Bytes, bufPos:Int) {
 		throw "readVertexBytes";
 	}
 
@@ -282,7 +301,20 @@ class KhaDriver extends h3d.impl.Driver {
 	}
 
 	override function selectBuffer(buffer:Buffer) {
-		g.setVertexBuffer(@:privateAccess buffer.buffer.vbuf);
+		if( !buffer.flags.has(RawFormat) ) {
+			throw "!RawFormat";
+		}
+
+		var wrapper = @:privateAccess buffer.buffer.vbuf;
+		if( wrapper.vertexBuffer == null ) {
+			wrapper.vertexBuffer = new VertexBuffer(wrapper.count, curProgram.structures[0], wrapper.usage, false);
+			var vertices = wrapper.vertexBuffer.lock();
+			for( i in 0...wrapper.data.length ) {
+				vertices.set(i, wrapper.data[i]);
+			}
+			wrapper.vertexBuffer.unlock();
+		}
+		g.setVertexBuffer(wrapper.vertexBuffer);
 	}
 
 	override function selectMultiBuffers(bl:Buffer.BufferOffset) {

@@ -2,7 +2,7 @@ package h3d.impl;
 
 #if kha
 typedef IndexBuffer = kha.graphics4.IndexBuffer;
-typedef VertexBuffer = kha.graphics4.VertexBuffer;
+typedef VertexBuffer = KhaDriver.VertexWrapper;
 typedef Texture = kha.Image;
 typedef DepthBuffer = {};
 typedef Query = {};
