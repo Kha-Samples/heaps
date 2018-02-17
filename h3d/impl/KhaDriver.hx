@@ -590,11 +590,24 @@ class KhaDriver extends h3d.impl.Driver {
 		}
 	}
 
+	var lastVertexGlobals:h3d.shader.Buffers.ShaderBufferData;
+	var lastVertexParams:h3d.shader.Buffers.ShaderBufferData;
+	var lastVertexTextures:haxe.ds.Vector<h3d.mat.Texture>;
+	var lastFragmentGlobals:h3d.shader.Buffers.ShaderBufferData;
+	var lastFragmentParams:h3d.shader.Buffers.ShaderBufferData;
+	var lastFragmentTextures:haxe.ds.Vector<h3d.mat.Texture>;
+
 	override function uploadShaderBuffers(buffers:h3d.shader.Buffers, which:h3d.shader.Buffers.BufferKind) {
-		if (curMaterial != null) {
-			selectPipeline();
-			uploadBuffer(curPipeline.vertexParameters, buffers.vertex, which);
-			uploadBuffer(curPipeline.fragmentParameters, buffers.fragment, which);
+		switch( which ) {
+		case Globals:
+			lastVertexGlobals = buffers.vertex.globals;
+			lastFragmentGlobals = buffers.fragment.globals;
+		case Params:
+			lastVertexParams = buffers.vertex.params;
+			lastFragmentParams = buffers.fragment.params;
+		case Textures:
+			lastVertexTextures = buffers.vertex.tex;
+			lastFragmentTextures = buffers.fragment.tex;
 		}
 	}
 
@@ -614,7 +627,7 @@ class KhaDriver extends h3d.impl.Driver {
 		kha.graphics4.TextureAddressing.Repeat,
 	];
 
-	function uploadBuffer(parameters:ShaderParameters, buf:h3d.shader.Buffers.ShaderBuffers, which:h3d.shader.Buffers.BufferKind) {
+	/*function uploadBuffer(parameters:ShaderParameters, buf:h3d.shader.Buffers.ShaderBuffers, which:h3d.shader.Buffers.BufferKind) {
 		switch( which ) {
 		case Globals:
 			g.setFloats(parameters.globals, buf.globals);
@@ -638,11 +651,67 @@ class KhaDriver extends h3d.impl.Driver {
 				}
 			}
 		}
-	}
+	}*/
 
 	override function draw(ibuf:IndexBuffer, startIndex:Int, ntriangles:Int) {
 		g.setIndexBuffer(ibuf);
 		selectPipeline();
+
+		if ( lastVertexGlobals != null ) {
+			g.setFloats(curPipeline.vertexParameters.globals, lastVertexGlobals);
+			lastVertexGlobals = null;
+		}
+		if ( lastFragmentGlobals != null ) {
+			g.setFloats(curPipeline.fragmentParameters.globals, lastFragmentGlobals);
+			lastFragmentGlobals = null;
+		}
+		if ( lastVertexParams != null ) {
+			g.setFloats(curPipeline.vertexParameters.params, lastVertexParams);
+			lastVertexParams = null;
+		}
+		if ( lastFragmentParams != null ) {
+			g.setFloats(curPipeline.fragmentParameters.params, lastFragmentParams);
+			lastFragmentParams = null;
+		}
+		if ( lastVertexTextures != null ) {
+			for( i in 0...curPipeline.vertexParameters.textures.length + curPipeline.vertexParameters.cubeTextures.length ) {
+				var texture = lastVertexTextures[i];
+				var isCube = i >= curPipeline.vertexParameters.textures.length;
+				if( texture != null && !texture.isDisposed() ) {
+					if( isCube ) {
+						throw "CubeTexture";
+					}
+					else {
+						g.setTexture(curPipeline.vertexParameters.textures[i], texture.t);
+						var mip = Type.enumIndex(texture.mipMap);
+						var filter = Type.enumIndex(texture.filter);
+						var wrap = Type.enumIndex(texture.wrap);
+						g.setTextureParameters(curPipeline.vertexParameters.textures[i], TWRAP[wrap], TWRAP[wrap], TFILTERS[filter], TFILTERS[filter], TMIPS[mip]);
+					}					
+				}
+			}
+			lastVertexTextures = null;
+		}
+		if ( lastFragmentTextures != null ) {
+			for( i in 0...curPipeline.fragmentParameters.textures.length + curPipeline.fragmentParameters.cubeTextures.length ) {
+				var texture = lastFragmentTextures[i];
+				var isCube = i >= curPipeline.fragmentParameters.textures.length;
+				if( texture != null && !texture.isDisposed() ) {
+					if( isCube ) {
+						throw "CubeTexture";
+					}
+					else {
+						g.setTexture(curPipeline.fragmentParameters.textures[i], texture.t);
+						var mip = Type.enumIndex(texture.mipMap);
+						var filter = Type.enumIndex(texture.filter);
+						var wrap = Type.enumIndex(texture.wrap);
+						g.setTextureParameters(curPipeline.fragmentParameters.textures[i], TWRAP[wrap], TWRAP[wrap], TFILTERS[filter], TFILTERS[filter], TMIPS[mip]);
+					}					
+				}
+			}
+			lastFragmentTextures = null;
+		}		
+
 		g.drawIndexedVertices(startIndex, Std.int(ntriangles * 3));
 	}
 }
