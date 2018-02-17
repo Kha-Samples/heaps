@@ -2,12 +2,18 @@ package h3d.impl;
 
 import h3d.impl.Driver;
 import h3d.mat.Pass;
+import h3d.mat.Stencil;
 import kha.Framebuffer;
 import kha.Image;
+import kha.graphics4.BlendingFactor;
+import kha.graphics4.BlendingOperation;
+import kha.graphics4.CompareMode;
 import kha.graphics4.ConstantLocation;
+import kha.graphics4.CullMode;
 import kha.graphics4.FragmentShader;
 import kha.graphics4.IndexBuffer;
 import kha.graphics4.PipelineState;
+import kha.graphics4.StencilAction;
 import kha.graphics4.TextureUnit;
 import kha.graphics4.Usage;
 import kha.graphics4.VertexBuffer;
@@ -29,19 +35,62 @@ private class ShaderParameters {
 	}
 }
 
-private class Program {
+private class Pipeline {
 	public var pipeline:PipelineState;
-	public var structures: Array<VertexStructure>;
 	public var vertexParameters:ShaderParameters;
 	public var fragmentParameters:ShaderParameters;
 
+	public function new(program:Program, material:Material) {
+		pipeline = new PipelineState();
+		
+		pipeline.vertexShader = program.vertexShader;
+		pipeline.fragmentShader = program.fragmentShader;
+		pipeline.inputLayout = program.structures;
+
+		pipeline.cullMode = material.cullMode;
+		pipeline.depthWrite = material.depthWrite;
+		pipeline.depthMode = material.depthMode;
+		pipeline.stencilMode = material.stencilMode;
+		pipeline.stencilBothPass = material.stencilBothPass;
+		pipeline.stencilDepthFail = material.stencilDepthFail;
+		pipeline.stencilFail = material.stencilFail;
+		pipeline.stencilReferenceValue = material.stencilReferenceValue;
+		pipeline.stencilReadMask = material.stencilReadMask;
+		pipeline.stencilWriteMask = material.stencilWriteMask;
+		pipeline.blendSource = material.blendSource;
+		pipeline.blendDestination = material.blendDestination;
+		pipeline.blendOperation = material.blendOperation;
+		pipeline.alphaBlendSource = material.alphaBlendSource;
+		pipeline.alphaBlendDestination = material.alphaBlendDestination;
+		pipeline.alphaBlendOperation = material.alphaBlendOperation;
+		pipeline.colorWriteMaskRed = material.colorWriteMaskRed;
+		pipeline.colorWriteMaskGreen = material.colorWriteMaskGreen;
+		pipeline.colorWriteMaskBlue = material.colorWriteMaskBlue;
+		pipeline.colorWriteMaskAlpha = material.colorWriteMaskAlpha;
+
+		pipeline.compile();
+
+		vertexParameters = new ShaderParameters(pipeline, program.vertexShaderData, "vertex");		
+		fragmentParameters = new ShaderParameters(pipeline, program.fragmentShaderData, "fragment");
+	}
+}
+
+private class Program {
+	public var id:Int;
+	public var vertexShader:VertexShader;
+	public var fragmentShader:FragmentShader;
+	public var structures:Array<VertexStructure>;
+	public var vertexShaderData:hxsl.RuntimeShader.RuntimeShaderData;
+	public var fragmentShaderData:hxsl.RuntimeShader.RuntimeShaderData;
+
 	public function new(shader:hxsl.RuntimeShader) {
+		this.id = shader.id;
+
 		var glout = new hxsl.GlslOut();
 		glout.glES = true;
 
-		pipeline = new PipelineState();
-		pipeline.vertexShader = VertexShader.fromSource(glout.run(shader.vertex.data));
-		pipeline.fragmentShader = FragmentShader.fromSource(glout.run(shader.fragment.data));
+		vertexShader = VertexShader.fromSource(glout.run(shader.vertex.data));
+		fragmentShader = FragmentShader.fromSource(glout.run(shader.fragment.data));
 
 		// trace("Vertex shader:\n" + glout.run(shader.vertex.data));
 		// trace("Fragment shader:\n" + glout.run(shader.fragment.data));
@@ -67,12 +116,76 @@ private class Program {
 			default:
 			}
 		this.structures = [structure];
-		pipeline.inputLayout = this.structures;
-		pipeline.compile();
-
-		vertexParameters = new ShaderParameters(pipeline, shader.vertex, "vertex");		
-		fragmentParameters = new ShaderParameters(pipeline, shader.fragment, "fragment");
+		
+		vertexShaderData = shader.vertex;
+		fragmentShaderData = shader.fragment;
 	}
+}
+
+private class Material {
+	public function new(id:Int) {
+		this.id = id;
+
+		inputLayout = null;
+		vertexShader = null;
+		fragmentShader = null;
+
+		cullMode = CullMode.None;
+
+		depthWrite = false;
+		depthMode = CompareMode.Always;
+
+		stencilMode = CompareMode.Always;
+		stencilBothPass = StencilAction.Keep;
+		stencilDepthFail = StencilAction.Keep;
+		stencilFail = StencilAction.Keep;
+		stencilReferenceValue = 0;
+		stencilReadMask = 0xff;
+		stencilWriteMask = 0xff;
+
+		blendSource = BlendingFactor.BlendOne;
+		blendDestination = BlendingFactor.BlendZero;
+		blendOperation = BlendingOperation.Add;
+		alphaBlendSource = BlendingFactor.BlendOne;
+		alphaBlendDestination = BlendingFactor.BlendZero;
+		alphaBlendOperation = BlendingOperation.Add;
+		
+		colorWriteMaskRed = true;
+		colorWriteMaskGreen = true;
+		colorWriteMaskBlue = true;
+		colorWriteMaskAlpha = true;
+	}
+
+	public var id:Int;
+
+	public var inputLayout:Array<VertexStructure>;
+	public var vertexShader:VertexShader;
+	public var fragmentShader:FragmentShader;
+
+	public var cullMode:CullMode;
+
+	public var depthWrite:Bool;
+	public var depthMode:CompareMode;
+
+	public var stencilMode:CompareMode;
+	public var stencilBothPass:StencilAction;
+	public var stencilDepthFail:StencilAction;
+	public var stencilFail:StencilAction;
+	public var stencilReferenceValue:Int;
+	public var stencilReadMask:Int;
+	public var stencilWriteMask:Int;
+
+	public var blendSource:BlendingFactor;
+	public var blendDestination:BlendingFactor;
+	public var blendOperation:BlendingOperation;
+	public var alphaBlendSource:BlendingFactor;
+	public var alphaBlendDestination:BlendingFactor;
+	public var alphaBlendOperation:BlendingOperation;
+	
+	public var colorWriteMaskRed:Bool;
+	public var colorWriteMaskGreen:Bool;
+	public var colorWriteMaskBlue:Bool;
+	public var colorWriteMaskAlpha:Bool;
 }
 
 class VertexWrapper {
@@ -105,6 +218,7 @@ class KhaDriver extends h3d.impl.Driver {
 	}
 
 	override function begin(frame:Int) {
+		curPipeline = null;
 		g.begin();
 	}
 
@@ -241,12 +355,148 @@ class KhaDriver extends h3d.impl.Driver {
 		t.t.unlock();
 	}
 
-	static var firstSelectMaterial = true;
+	static var CULLFACES = [
+		kha.graphics4.CullMode.None,
+		kha.graphics4.CullMode.CounterClockwise,
+		kha.graphics4.CullMode.Clockwise,
+		kha.graphics4.CullMode.None,
+	];
+
+	static var BLEND = [
+		kha.graphics4.BlendingFactor.BlendOne,
+		kha.graphics4.BlendingFactor.BlendZero,
+		kha.graphics4.BlendingFactor.SourceAlpha,
+		kha.graphics4.BlendingFactor.SourceColor,
+		kha.graphics4.BlendingFactor.DestinationAlpha,
+		kha.graphics4.BlendingFactor.DestinationColor,
+		kha.graphics4.BlendingFactor.InverseSourceAlpha,
+		kha.graphics4.BlendingFactor.InverseSourceColor,
+		kha.graphics4.BlendingFactor.InverseDestinationAlpha,
+		kha.graphics4.BlendingFactor.InverseDestinationColor,
+		kha.graphics4.BlendingFactor.Undefined, // CONSTANT_COLOR
+		kha.graphics4.BlendingFactor.Undefined, // CONSTANT_ALPHA
+		kha.graphics4.BlendingFactor.Undefined, // ONE_MINUS_CONSTANT_COLOR
+		kha.graphics4.BlendingFactor.Undefined, // ONE_MINUS_CONSTANT_ALPHA
+		kha.graphics4.BlendingFactor.Undefined, // SRC_ALPHA_SATURATE
+	];
+
+	static var OP = [
+		kha.graphics4.BlendingOperation.Add,
+		kha.graphics4.BlendingOperation.Subtract,
+		kha.graphics4.BlendingOperation.ReverseSubtract,
+	];
+
+	static var COMPARE = [
+		kha.graphics4.CompareMode.Always,
+		kha.graphics4.CompareMode.Never,
+		kha.graphics4.CompareMode.Equal,
+		kha.graphics4.CompareMode.NotEqual,
+		kha.graphics4.CompareMode.Greater,
+		kha.graphics4.CompareMode.GreaterEqual,
+		kha.graphics4.CompareMode.Less,
+		kha.graphics4.CompareMode.LessEqual,
+	];
+
+	static var STENCIL_OP = [
+		kha.graphics4.StencilAction.Keep,
+		kha.graphics4.StencilAction.Zero,
+		kha.graphics4.StencilAction.Replace,
+		kha.graphics4.StencilAction.Increment,
+		kha.graphics4.StencilAction.IncrementWrap,
+		kha.graphics4.StencilAction.Decrement,
+		kha.graphics4.StencilAction.DecrementWrap,
+		kha.graphics4.StencilAction.Invert,
+	];
+
+	var materials = new Map<Int, Material>();
+	var curMaterial: Material;
+	
 	override public function selectMaterial(pass:h3d.mat.Pass) {
-		if ( firstSelectMaterial ) {
-			trace("TODO: selectMaterial");
-			firstSelectMaterial = false;
+		if (materials.exists(@:privateAccess pass.passId)) {
+			curMaterial = materials.get(@:privateAccess pass.passId);
+			return;
 		}
+
+		var material = new Material(@:privateAccess pass.passId);
+		var bits = @:privateAccess pass.bits;
+		if( bits & Pass.culling_mask != 0 ) {
+			var cull = Pass.getCulling(bits);
+			if( cull == 0 )
+				material.cullMode = kha.graphics4.CullMode.None;
+			else {
+				material.cullMode = CULLFACES[cull];
+			}
+		}
+		if( bits & (Pass.blendSrc_mask | Pass.blendDst_mask | Pass.blendAlphaSrc_mask | Pass.blendAlphaDst_mask) != 0 ) {
+			var csrc = Pass.getBlendSrc(bits);
+			var cdst = Pass.getBlendDst(bits);
+			var asrc = Pass.getBlendAlphaSrc(bits);
+			var adst = Pass.getBlendAlphaDst(bits);
+			material.blendSource = BLEND[csrc];
+			material.alphaBlendSource = BLEND[asrc];
+			material.blendDestination = BLEND[cdst];
+			material.alphaBlendDestination = BLEND[adst];
+		}
+		if( bits & (Pass.blendOp_mask | Pass.blendAlphaOp_mask) != 0 ) {
+			var cop = Pass.getBlendOp(bits);
+			var aop = Pass.getBlendAlphaOp(bits);
+			material.blendOperation = OP[cop];
+			material.alphaBlendOperation = OP[aop];
+		}
+		if( bits & Pass.depthWrite_mask != 0 )
+			material.depthWrite = true;
+		if( bits & Pass.depthTest_mask != 0 ) {
+			var cmp = Pass.getDepthTest(bits);
+			material.depthMode = COMPARE[cmp];
+		}
+		if( bits & Pass.colorMask_mask != 0 ) {
+			var m = Pass.getColorMask(bits);
+			material.colorWriteMaskRed   = m & 1 != 0;
+			material.colorWriteMaskGreen = m & 2 != 0;
+			material.colorWriteMaskBlue  = m & 4 != 0;
+			material.colorWriteMaskAlpha = m & 8 != 0;
+		}
+
+		// TODO: two-sided stencil
+		var s = pass.stencil;
+		if( s != null ) {
+			var opBits = @:privateAccess s.opBits;
+			var frBits = @:privateAccess s.frontRefBits;
+			var brBits = @:privateAccess s.backRefBits;
+
+			if( opBits & (Stencil.frontSTfail_mask | Stencil.frontDPfail_mask | Stencil.frontDPpass_mask) != 0 ) {
+				material.stencilFail = STENCIL_OP[Stencil.getFrontSTfail(opBits)];
+				material.stencilDepthFail = STENCIL_OP[Stencil.getFrontDPfail(opBits)];
+				material.stencilBothPass = STENCIL_OP[Stencil.getFrontDPpass(opBits)];
+			}
+
+			if( opBits & (Stencil.backSTfail_mask | Stencil.backDPfail_mask | Stencil.backDPpass_mask) != 0 ) {
+				material.stencilFail = STENCIL_OP[Stencil.getBackSTfail(opBits)];
+				material.stencilDepthFail = STENCIL_OP[Stencil.getBackDPfail(opBits)];
+				material.stencilBothPass = STENCIL_OP[Stencil.getBackDPpass(opBits)];
+			}
+
+			if( (opBits & Stencil.frontTest_mask) | (frBits & (Stencil.frontRef_mask | Stencil.frontReadMask_mask)) != 0 ) {
+				material.stencilMode = COMPARE[Stencil.getFrontTest(opBits)];
+				material.stencilReferenceValue = Stencil.getFrontRef(frBits);
+				material.stencilReadMask = Stencil.getFrontReadMask(frBits);
+			}
+
+			if( (opBits & Stencil.backTest_mask) | (brBits & (Stencil.backRef_mask | Stencil.backReadMask_mask)) != 0 ) {
+				material.stencilMode = COMPARE[Stencil.getBackTest(opBits)];
+				material.stencilReferenceValue = Stencil.getBackRef(brBits);
+				material.stencilReadMask = Stencil.getBackReadMask(brBits);
+			}
+
+			if( frBits & Stencil.frontWriteMask_mask != 0 )
+				material.stencilWriteMask = Stencil.getFrontWriteMask(frBits);
+
+			if( brBits & Stencil.backWriteMask_mask != 0 )
+				material.stencilWriteMask = Stencil.getBackWriteMask(brBits);
+		}
+
+		materials.set(material.id, material);
+		curMaterial = material;
 	}
 
 	override function getNativeShaderCode(shader:hxsl.RuntimeShader) {
@@ -296,7 +546,6 @@ class KhaDriver extends h3d.impl.Driver {
 			program = new Program(shader);
 			programs.set(shader.id, program);
 		}
-		g.setPipeline(program.pipeline);
 		curProgram = program;
 		return true;
 	}
@@ -326,9 +575,27 @@ class KhaDriver extends h3d.impl.Driver {
 		throw "selectMultiBuffers";
 	}
 
+	var pipelines = new Map<{material: Int, program: Int}, Pipeline>();
+	var curPipeline: Pipeline;
+
+	function selectPipeline() {
+		var pipeline = pipelines.get({material: curMaterial.id, program: curProgram.id});
+		if( pipeline == null ) {
+			pipeline = new Pipeline(curProgram, curMaterial);
+			pipelines.set({material: curMaterial.id, program: curProgram.id}, pipeline);
+		}
+		if( pipeline != curPipeline ) {
+			g.setPipeline(pipeline.pipeline);
+			curPipeline = pipeline;
+		}
+	}
+
 	override function uploadShaderBuffers(buffers:h3d.shader.Buffers, which:h3d.shader.Buffers.BufferKind) {
-		uploadBuffer(curProgram.vertexParameters, buffers.vertex, which);
-		uploadBuffer(curProgram.fragmentParameters, buffers.fragment, which);
+		if (curMaterial != null) {
+			selectPipeline();
+			uploadBuffer(curPipeline.vertexParameters, buffers.vertex, which);
+			uploadBuffer(curPipeline.fragmentParameters, buffers.fragment, which);
+		}
 	}
 
 	static var TFILTERS = [
@@ -375,6 +642,7 @@ class KhaDriver extends h3d.impl.Driver {
 
 	override function draw(ibuf:IndexBuffer, startIndex:Int, ntriangles:Int) {
 		g.setIndexBuffer(ibuf);
+		selectPipeline();
 		g.drawIndexedVertices(startIndex, Std.int(ntriangles * 3));
 	}
 }
