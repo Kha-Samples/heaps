@@ -331,6 +331,22 @@ class KhaDriver extends h3d.impl.Driver {
 		uploadBuffer(curProgram.fragmentParameters, buffers.fragment, which);
 	}
 
+	static var TFILTERS = [
+		kha.graphics4.TextureFilter.PointFilter,
+		kha.graphics4.TextureFilter.LinearFilter,
+	];
+
+	static var TMIPS = [
+		kha.graphics4.MipMapFilter.NoMipFilter,
+		kha.graphics4.MipMapFilter.PointMipFilter,
+		kha.graphics4.MipMapFilter.LinearMipFilter,
+	];
+
+	static var TWRAP = [
+		kha.graphics4.TextureAddressing.Clamp,
+		kha.graphics4.TextureAddressing.Repeat,
+	];
+
 	function uploadBuffer(parameters:ShaderParameters, buf:h3d.shader.Buffers.ShaderBuffers, which:h3d.shader.Buffers.BufferKind) {
 		switch( which ) {
 		case Globals:
@@ -347,7 +363,11 @@ class KhaDriver extends h3d.impl.Driver {
 					}
 					else {
 						g.setTexture(parameters.textures[i], texture.t);
-					}
+						var mip = Type.enumIndex(texture.mipMap);
+						var filter = Type.enumIndex(texture.filter);
+						var wrap = Type.enumIndex(texture.wrap);
+						g.setTextureParameters(parameters.textures[i], TWRAP[wrap], TWRAP[wrap], TFILTERS[filter], TFILTERS[filter], TMIPS[mip]);
+					}					
 				}
 			}
 		}
